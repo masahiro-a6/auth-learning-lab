@@ -38,39 +38,59 @@ interface Leg {
   desc: string // このレグで何が起きているか1行
 }
 
-const STEP_LEGS: Record<number, Leg[]> = {
-  1: [
-    { icon: '📨', label: '認可リクエスト', from: 'browser', to: 'idp', color: '#3b82f6',
-      desc: 'ブラウザが state / nonce 付きの認可リクエストで IdP へリダイレクト' },
-  ],
-  2: [
-    { icon: '🖥️', label: 'ログイン画面', from: 'idp', to: 'browser', color: '#a78bfa',
-      desc: 'IdP がログイン画面を返す（この画面は IdP のもの。アプリではない）' },
-    { icon: '🔑', label: 'ID / パスワード', from: 'browser', to: 'idp', color: '#a78bfa',
-      desc: 'ユーザーが ID/PW を入力して送信（パスワードは IdP にしか送られない）' },
-  ],
-  3: [
-    { icon: '🎫', label: '認可コード', from: 'idp', to: 'browser', color: '#f59e0b',
-      desc: '認証成功。IdP が60秒だけ有効な認可コードを redirect_uri へ返す' },
-  ],
-  4: [
-    { icon: '🎫', label: 'コード + client_secret', from: 'browser', to: 'idp', color: '#f59e0b',
-      desc: 'アプリが認可コードと client_secret を IdP の /auth/token へ送信' },
-    { icon: '🪙', label: 'トークン ×3', from: 'idp', to: 'browser', color: '#22c55e',
-      desc: 'IdP が access / id / refresh の3トークンを返却（コードは使用済みで無効化）' },
-  ],
-  5: [
-    { icon: '📨', label: 'JWKS リクエスト', from: 'api', to: 'idp', color: '#a78bfa',
-      desc: 'API サーバーが IdP の JWKS エンドポイントに公開鍵を取りに行く' },
-    { icon: '🔓', label: '公開鍵 (JWKS)', from: 'idp', to: 'api', color: '#a78bfa',
-      desc: 'IdP が公開鍵セットを返す。API はこれで署名検証の準備が整う' },
-  ],
-  6: [
-    { icon: '🪙', label: 'JWT (Bearer)', from: 'browser', to: 'api', color: '#22c55e',
-      desc: 'Authorization: Bearer ヘッダーに JWT を載せて API を呼ぶ' },
-    { icon: '✅', label: 'レスポンス', from: 'api', to: 'browser', color: '#22c55e',
-      desc: 'API が署名・有効期限・権限を検証してデータを返す' },
-  ],
+// 各ステップ「到着時」に再生する = 直前のボタンで実際に発生した通信。
+// legs が空のステップ（=まだ何も送っていない）は idle チップを所定の位置で待機表示する。
+interface StepAnim {
+  legs: Leg[]
+  idle?: { icon: string; label: string; lane: Lane; color: string; desc: string }
+}
+
+const STEP_ANIMS: Record<number, StepAnim> = {
+  1: {
+    legs: [],
+    idle: { icon: '📨', label: '認可リクエスト（待機中）', lane: 'browser', color: '#3b82f6',
+      desc: 'まだ何も送信していません。ボタンを押すと、ブラウザから IdP へ認可リクエストが飛びます' },
+  },
+  2: {
+    legs: [
+      { icon: '📨', label: '認可リクエスト', from: 'browser', to: 'idp', color: '#3b82f6',
+        desc: 'ブラウザが state / nonce 付きの認可リクエストで IdP へリダイレクト' },
+      { icon: '🖥️', label: 'ログイン画面', from: 'idp', to: 'browser', color: '#a78bfa',
+        desc: 'IdP がログイン画面を返す。次はユーザーを選んで ID/PW を送信（画面は IdP のもの。アプリではない）' },
+    ],
+  },
+  3: {
+    legs: [
+      { icon: '🔑', label: 'ID / パスワード', from: 'browser', to: 'idp', color: '#a78bfa',
+        desc: 'ユーザーが ID/PW を入力して IdP へ送信（パスワードは IdP にしか送られない）' },
+      { icon: '🎫', label: '認可コード', from: 'idp', to: 'browser', color: '#f59e0b',
+        desc: '認証成功。IdP が60秒だけ有効な認可コードを redirect_uri へ返す' },
+    ],
+  },
+  4: {
+    legs: [
+      { icon: '🎫', label: 'コード + client_secret', from: 'browser', to: 'idp', color: '#f59e0b',
+        desc: 'アプリが認可コードと client_secret を IdP の /auth/token へ送信' },
+      { icon: '🪙', label: 'トークン ×3', from: 'idp', to: 'browser', color: '#22c55e',
+        desc: 'IdP が access / id / refresh の3トークンを返却（コードは使用済みで無効化）' },
+    ],
+  },
+  5: {
+    legs: [
+      { icon: '📨', label: 'JWKS リクエスト', from: 'api', to: 'idp', color: '#a78bfa',
+        desc: 'API サーバーが IdP の JWKS エンドポイントに公開鍵を取りに行く' },
+      { icon: '🔓', label: '公開鍵 (JWKS)', from: 'idp', to: 'api', color: '#a78bfa',
+        desc: 'IdP が公開鍵セットを返す。API はこれで署名検証の準備が整う' },
+    ],
+  },
+  6: {
+    legs: [
+      { icon: '🪙', label: 'JWT (Bearer)', from: 'browser', to: 'api', color: '#22c55e',
+        desc: 'Authorization: Bearer ヘッダーに JWT を載せて API を呼ぶ' },
+      { icon: '✅', label: 'レスポンス', from: 'api', to: 'browser', color: '#22c55e',
+        desc: 'API が署名・有効期限・権限を検証してデータを返す' },
+    ],
+  },
 }
 
 const ACTORS: { lane: Lane; icon: string; name: string; sub: string; color: string }[] = [
@@ -87,10 +107,17 @@ const LEG_DURATION = 1100  // 1レグの移動時間(ms) — chip の transition
 const LEG_PAUSE = 500      // レグ間の小休止(ms)
 
 export function FlowDiagram({ currentStep }: Props) {
-  const legs = STEP_LEGS[currentStep] ?? STEP_LEGS[1]
+  const anim = STEP_ANIMS[currentStep] ?? STEP_ANIMS[1]
+  const legs = anim.legs
+  const isIdle = legs.length === 0
   const [legIndex, setLegIndex] = useState(0)
   const [replayKey, setReplayKey] = useState(0)
-  const move = legs[Math.min(legIndex, legs.length - 1)]
+
+  // 表示中のチップ情報（idle なら待機チップ、それ以外は現在のレグ）
+  const move: Leg = isIdle
+    ? { icon: anim.idle!.icon, label: anim.idle!.label, from: anim.idle!.lane, to: anim.idle!.lane,
+        color: anim.idle!.color, desc: anim.idle!.desc }
+    : legs[Math.min(legIndex, legs.length - 1)]
   const samePos = move.from === move.to
 
   // チップ位置: レグ開始時に from へ瞬間移動 → 次フレームで to へアニメーション
@@ -106,15 +133,22 @@ export function FlowDiagram({ currentStep }: Props) {
 
   // レグごとの再生: from に置く → to へスライド → 完了後つぎのレグへ
   useEffect(() => {
-    const stepLegs = STEP_LEGS[currentStep] ?? STEP_LEGS[1]
-    const leg = stepLegs[Math.min(legIndex, stepLegs.length - 1)]
+    const stepAnim = STEP_ANIMS[currentStep] ?? STEP_ANIMS[1]
 
-    setAnimating(false)          // transition を切って…
-    setChipPos(POS[leg.from])    // 始点へ瞬間移動
     cancelAnimationFrame(rafRef.current)
     timerRef.current.forEach(clearTimeout)
     timerRef.current = []
 
+    // idle ステップ: 所定の位置に置くだけ（アニメーションなし）
+    if (stepAnim.legs.length === 0) {
+      setAnimating(false)
+      setChipPos(POS[stepAnim.idle!.lane])
+      return
+    }
+
+    const leg = stepAnim.legs[Math.min(legIndex, stepAnim.legs.length - 1)]
+    setAnimating(false)          // transition を切って…
+    setChipPos(POS[leg.from])    // 始点へ瞬間移動
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = requestAnimationFrame(() => {
         setAnimating(true)       // transition を有効化して…
@@ -123,7 +157,7 @@ export function FlowDiagram({ currentStep }: Props) {
     })
 
     // 最後のレグでなければ、移動完了+小休止ののち次のレグへ
-    if (legIndex < stepLegs.length - 1) {
+    if (legIndex < stepAnim.legs.length - 1) {
       timerRef.current.push(setTimeout(() => {
         setLegIndex(i => i + 1)
       }, LEG_DURATION + LEG_PAUSE))
@@ -322,7 +356,7 @@ export function FlowDiagram({ currentStep }: Props) {
           )}
         </span>
         <span>{move.desc}</span>
-        <button
+        {!isIdle && <button
           onClick={() => { setLegIndex(0); setReplayKey(k => k + 1) }}
           title="この通信のアニメーションをもう一度再生"
           style={{
@@ -339,7 +373,7 @@ export function FlowDiagram({ currentStep }: Props) {
           }}
         >
           ↺ 再生
-        </button>
+        </button>}
       </div>
 
       <style>{`
