@@ -146,7 +146,7 @@ export function ApiCaller({ token, expiresAt }: Props) {
           onClick={handleCall}
           disabled={loading || !token}
         >
-          {loading ? '⏳ 呼び出し中...' : `🚀 ${selectedEndpoint.label}`}
+          {loading ? '⏳ 送信中...' : `🪙 JWT を付けて API へ送信（${selectedEndpoint.method} ${selectedEndpoint.path}）`}
         </button>
 
         {/* 期限切れトークンで意図的に試す用 */}

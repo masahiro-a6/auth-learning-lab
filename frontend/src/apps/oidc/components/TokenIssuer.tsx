@@ -159,7 +159,7 @@ export function TokenIssuer({ onTokenIssued }: Props) {
       </div>
 
       <button className="btn btn-primary" onClick={handleSubmit} disabled={loading}>
-        {loading ? '⏳ 発行中...' : '🔑 JWTを発行する'}
+        {loading ? '⏳ 発行中...' : '📨 IdP へ発行リクエスト → 🪙 JWT を受け取る'}
       </button>
 
       {error && (

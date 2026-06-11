@@ -473,7 +473,7 @@ export function OidcFlow() {
           onClick={fetchUsers}
           disabled={usersLoading}
         >
-          {usersLoading ? '接続中...' : '→ IdP（認可サーバー）にリクエスト送信'}
+          {usersLoading ? '送信中...' : '📨 ブラウザ → IdP：認可リクエストを送信（state/nonce 付き）'}
         </button>
       </StepCard>
 
@@ -543,6 +543,14 @@ export function OidcFlow() {
               </div>
               <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: 4 }}>
                 {user.team}
+              </div>
+              <div style={{
+                marginTop: 8,
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                color: 'var(--accent)',
+              }}>
+                🔑 このユーザーの ID/PW を IdP に送信 →
               </div>
             </button>
           ))}
@@ -628,7 +636,7 @@ export function OidcFlow() {
               onClick={exchangeToken}
               disabled={tokenLoading || (codeCountdown !== null && codeCountdown <= 0)}
             >
-              {tokenLoading ? 'トークン交換中...' : '→ /auth/token でトークンに交換'}
+              {tokenLoading ? 'トークン交換中...' : '🎫 アプリ → IdP：認可コードを送ってトークンと交換（POST /auth/token）'}
             </button>
             {codeCountdown !== null && (
               <span style={{
@@ -689,7 +697,7 @@ export function OidcFlow() {
             style={{ marginTop: 16 }}
             onClick={fetchJwks}
           >
-            → JWKS 検証の仕組みを理解する
+            🔓 API → IdP：公開鍵を取得（GET /.well-known/jwks.json）
           </button>
         </StepCard>
       )}
@@ -822,7 +830,7 @@ export function OidcFlow() {
           </div>
 
           <button className="btn btn-primary" onClick={goToApiCall}>
-            → access_token を使ってAPIを呼び出す
+            🪙 ブラウザ → API：access_token を付けてリクエスト（Authorization: Bearer）
           </button>
         </StepCard>
       )}
