@@ -114,6 +114,7 @@ export function FlowDiagram({ currentStep }: Props) {
   const isIdle = legs.length === 0
   const [legIndex, setLegIndex] = useState(0)
   const [replayKey, setReplayKey] = useState(0)
+  const [showTimeline, setShowTimeline] = useState(true)
 
   // 表示中のチップ情報（idle なら待機チップ、それ以外は現在のレグ）
   const move: Leg = isIdle
@@ -172,7 +173,6 @@ export function FlowDiagram({ currentStep }: Props) {
   }, [currentStep, legIndex, replayKey])
 
   return (
-    <>
     <div style={{
       position: 'sticky',
       top: 0,
@@ -359,38 +359,48 @@ export function FlowDiagram({ currentStep }: Props) {
           )}
         </span>
         <span>{move.desc}</span>
-        {!isIdle && <button
-          onClick={() => { setLegIndex(0); setReplayKey(k => k + 1) }}
-          title="この通信のアニメーションをもう一度再生"
-          style={{
-            marginLeft: 'auto',
-            flexShrink: 0,
-            background: 'none',
-            border: '1px solid var(--border)',
-            borderRadius: 99,
-            color: 'var(--text-muted)',
-            fontSize: '0.62rem',
-            padding: '1px 8px',
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}
-        >
-          ↺ 再生
-        </button>}
+        {!isIdle && (
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 5, flexShrink: 0 }}>
+            <button
+              onClick={() => { setLegIndex(0); setReplayKey(k => k + 1) }}
+              title="この通信のアニメーションをもう一度再生"
+              style={{
+                background: 'none',
+                border: '1px solid var(--border)',
+                borderRadius: 99,
+                color: 'var(--text-muted)',
+                fontSize: '0.62rem',
+                padding: '1px 8px',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              ↺ 再生
+            </button>
+            <button
+              onClick={() => setShowTimeline(s => !s)}
+              title="通信一覧の表示/非表示"
+              style={{
+                background: showTimeline ? 'var(--bg-inner)' : 'none',
+                border: '1px solid var(--border)',
+                borderRadius: 99,
+                color: showTimeline ? 'var(--text-secondary)' : 'var(--text-muted)',
+                fontSize: '0.62rem',
+                padding: '1px 8px',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              📋 一覧 {showTimeline ? '▲' : '▼'}
+            </button>
+          </span>
+        )}
       </div>
 
-      <style>{`
-        @keyframes chip-pulse {
-          0%, 100% { transform: scale(1); }
-          50%      { transform: scale(1.08); }
-        }
-      `}</style>
-    </div>
-
-    {/* ── 通信タイムライン（読める一覧・クリックで再生）── */}
-    {!isIdle && (
+    {/* ── 通信タイムライン（ヘッダー内 = スクロールしても見える）── */}
+    {!isIdle && showTimeline && (
       <div style={{
-        marginBottom: 20,
+        marginTop: 8,
         padding: '10px 12px',
         background: 'var(--bg-inner)',
         border: '1px solid var(--border)',
@@ -478,6 +488,13 @@ export function FlowDiagram({ currentStep }: Props) {
         </div>
       </div>
     )}
-    </>
+
+      <style>{`
+        @keyframes chip-pulse {
+          0%, 100% { transform: scale(1); }
+          50%      { transform: scale(1.08); }
+        }
+      `}</style>
+    </div>
   )
 }

@@ -220,6 +220,7 @@ function RotationFlowHeader({ stage, jump, onLegChange }: FlowHeaderProps) {
   const isIdle = legs.length === 0
   const [legIndex, setLegIndex] = useState(0)
   const [replayKey, setReplayKey] = useState(0)
+  const [showTimeline, setShowTimeline] = useState(true)
 
   // タイムライン行クリック → 指定レグから再生
   useEffect(() => {
@@ -417,25 +418,54 @@ function RotationFlowHeader({ stage, jump, onLegChange }: FlowHeaderProps) {
           )}
         </span>
         <span>{move.desc}</span>
-        {!isIdle && <button
-          onClick={() => { setLegIndex(0); setReplayKey(k => k + 1) }}
-          title="この通信のアニメーションをもう一度再生"
-          style={{
-            marginLeft: 'auto',
-            flexShrink: 0,
-            background: 'none',
-            border: '1px solid var(--border)',
-            borderRadius: 99,
-            color: 'var(--text-muted)',
-            fontSize: '0.62rem',
-            padding: '1px 8px',
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}
-        >
-          ↺ 再生
-        </button>}
+        {!isIdle && (
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 5, flexShrink: 0 }}>
+            <button
+              onClick={() => { setLegIndex(0); setReplayKey(k => k + 1) }}
+              title="この通信のアニメーションをもう一度再生"
+              style={{
+                background: 'none',
+                border: '1px solid var(--border)',
+                borderRadius: 99,
+                color: 'var(--text-muted)',
+                fontSize: '0.62rem',
+                padding: '1px 8px',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              ↺ 再生
+            </button>
+            <button
+              onClick={() => setShowTimeline(s => !s)}
+              title="通信一覧の表示/非表示"
+              style={{
+                background: showTimeline ? 'var(--bg-inner)' : 'none',
+                border: '1px solid var(--border)',
+                borderRadius: 99,
+                color: showTimeline ? 'var(--text-secondary)' : 'var(--text-muted)',
+                fontSize: '0.62rem',
+                padding: '1px 8px',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              📋 一覧 {showTimeline ? '▲' : '▼'}
+            </button>
+          </span>
+        )}
       </div>
+
+      {/* 通信タイムライン（ヘッダー内 = スクロールしても見える） */}
+      {!isIdle && showTimeline && (
+        <div style={{ marginTop: 8 }}>
+          <CommTimeline
+            stage={stage}
+            activeLeg={Math.min(legIndex, legs.length - 1)}
+            onSelect={i => { setLegIndex(i); setReplayKey(k => k + 1) }}
+          />
+        </div>
+      )}
 
       <style>{`
         @keyframes rot-chip-pulse {
@@ -750,25 +780,10 @@ export function RotationScenario({ keys, onRefresh }: Props) {
   // 完了済みの最終 STEP（連続実行前提なので非 null の最後のインデックス + 1）
   const completedStage = results.reduce((acc, r, i) => (r !== null ? i + 1 : acc), 0)
 
-  // 通信タイムラインとヘッダーの同期
-  const [activeLeg, setActiveLeg] = useState(0)
-  const [legJump, setLegJump] = useState<{ i: number; k: number } | undefined>()
-
   return (
     <div className="step-card">
-      {/* 動くチップ付きスティッキーヘッダー */}
-      <RotationFlowHeader
-        stage={completedStage}
-        jump={legJump}
-        onLegChange={setActiveLeg}
-      />
-
-      {/* 通信タイムライン（読める一覧・クリックで再生） */}
-      <CommTimeline
-        stage={completedStage}
-        activeLeg={activeLeg}
-        onSelect={i => setLegJump(prev => ({ i, k: (prev?.k ?? 0) + 1 }))}
-      />
+      {/* 動くチップ付きスティッキーヘッダー（通信一覧内蔵） */}
+      <RotationFlowHeader stage={completedStage} />
 
       <div className="step-head">
         <span className="step-badge">SCENARIO</span>
