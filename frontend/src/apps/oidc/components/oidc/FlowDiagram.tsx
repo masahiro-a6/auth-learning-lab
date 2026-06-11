@@ -41,8 +41,8 @@ interface ChipMove {
 const CHIP_MOVES: Record<number, ChipMove> = {
   1: { icon: '📨', label: '認可リクエスト',  from: 'browser', to: 'idp',     color: '#3b82f6',
        desc: 'ブラウザが state / nonce 付きで IdP へリダイレクト' },
-  2: { icon: '🔑', label: 'ID / パスワード', from: 'idp',     to: 'idp',     color: '#a78bfa',
-       desc: 'IdP のログイン画面でユーザーが認証（パスワードは IdP にしか送られない）' },
+  2: { icon: '🔑', label: 'ID / パスワード', from: 'browser', to: 'idp',     color: '#a78bfa',
+       desc: 'ユーザーが IdP のログイン画面に ID/PW を入力して送信（パスワードは IdP にしか送られない）' },
   3: { icon: '🎫', label: '認可コード',      from: 'idp',     to: 'browser', color: '#f59e0b',
        desc: 'IdP が60秒だけ有効な認可コードを発行してブラウザへ返す' },
   4: { icon: '🪙', label: 'トークン ×3',     from: 'idp',     to: 'browser', color: '#22c55e',
