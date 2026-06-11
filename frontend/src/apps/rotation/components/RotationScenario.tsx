@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import type { KeyEntry, IssuedToken, VerifyResult } from '../types'
 
 // ═══ 動くチップ付きスティッキーヘッダー（OIDCフローと同方式） ═══
@@ -496,6 +497,7 @@ interface ScenarioState {
 interface Props {
   keys: KeyEntry[]
   onRefresh: () => void
+  jwksPanel?: ReactNode  // 概念説明とステップの間に差し込む鍵管理パネル
 }
 
 // ─── 認証フロー図（SVG）: JWT署名 → JWKS検証 → 成功/失敗の分岐 ───
@@ -606,7 +608,7 @@ function RotationFlowDiagram() {
   )
 }
 
-export function RotationScenario({ keys, onRefresh }: Props) {
+export function RotationScenario({ keys, onRefresh, jwksPanel }: Props) {
   const activeKeys = keys.filter(k => k.status === 'active')
 
   const [baseKid, setBaseKid] = useState<string>('')
@@ -782,9 +784,6 @@ export function RotationScenario({ keys, onRefresh }: Props) {
 
   return (
     <div className="step-card">
-      {/* 動くチップ付きスティッキーヘッダー（通信一覧内蔵） */}
-      <RotationFlowHeader stage={completedStage} />
-
       <div className="step-head">
         <span className="step-badge">SCENARIO</span>
         <h2>ローテーション学習シナリオ</h2>
@@ -832,6 +831,12 @@ export function RotationScenario({ keys, onRefresh }: Props) {
         </div>
         <RotationFlowDiagram />
       </div>
+
+      {/* 鍵管理パネル（JWKS）— ステップ実行で鍵の状態がどう変わるかをすぐ上で確認できる */}
+      {jwksPanel}
+
+      {/* 動くチップ付きスティッキーヘッダー（通信一覧内蔵）— STEP 実行結果がここで再生される */}
+      <RotationFlowHeader stage={completedStage} />
 
       {/* 起点の鍵セレクタ */}
       <div style={{

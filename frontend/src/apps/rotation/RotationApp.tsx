@@ -74,11 +74,12 @@ export function RotationApp() {
 
       {!loading && !error && (
         <>
-          {/* ローテーションシナリオ（メイン学習コンテンツなので最上部） */}
-          <RotationScenario keys={keys} onRefresh={fetchKeys} />
-
-          {/* JWKS 管理パネル（シナリオ実行による鍵の状態変化を確認） */}
-          <JwksPanel keys={keys} onRefresh={fetchKeys} />
+          {/* ローテーションシナリオ（鍵管理パネルを説明とステップの間に内蔵） */}
+          <RotationScenario
+            keys={keys}
+            onRefresh={fetchKeys}
+            jwksPanel={<JwksPanel keys={keys} onRefresh={fetchKeys} />}
+          />
 
           {/* トークンワークベンチ（自由演習） */}
           <TokenWorkbench keys={keys} />
