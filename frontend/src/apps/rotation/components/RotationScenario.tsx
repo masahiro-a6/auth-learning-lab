@@ -1,5 +1,307 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { KeyEntry, IssuedToken, VerifyResult } from '../types'
+
+// ═══ 動くチップ付きスティッキーヘッダー（OIDCフローと同方式） ═══
+const POS = { browser: 8, idp: 50, api: 92 } as const
+type Lane = keyof typeof POS
+
+interface Leg {
+  icon: string
+  label: string
+  from: Lane
+  to: Lane
+  color: string
+  desc: string
+}
+
+interface StageAnim {
+  legs: Leg[]
+  idle?: { icon: string; label: string; lane: Lane; color: string; desc: string }
+}
+
+// stage = 完了済みの最終 STEP 番号（0 = まだ何も実行していない）
+const STAGE_ANIMS: Record<number, StageAnim> = {
+  0: {
+    legs: [],
+    idle: { icon: '🪙', label: 'JWT（未発行）', lane: 'browser', color: '#3b82f6',
+      desc: 'まだ何も実行していません。STEP 1 を実行すると JWT 発行 → 検証の通信が再生されます' },
+  },
+  1: {
+    legs: [
+      { icon: '📨', label: '発行リクエスト', from: 'browser', to: 'idp', color: '#3b82f6',
+        desc: 'クライアントが IdP に JWT の発行を依頼' },
+      { icon: '🪙', label: 'JWT（旧鍵で署名）', from: 'idp', to: 'browser', color: '#22c55e',
+        desc: 'IdP が active な鍵の秘密鍵で署名した JWT を返す' },
+      { icon: '🪙', label: 'JWT を提示', from: 'browser', to: 'api', color: '#22c55e',
+        desc: 'クライアントが JWT を API へ送信' },
+      { icon: '🔓', label: 'JWKS 照会', from: 'api', to: 'idp', color: '#a78bfa',
+        desc: 'API が JWT ヘッダーの kid に対応する公開鍵を JWKS から取得' },
+      { icon: '✅', label: '検証成功', from: 'api', to: 'browser', color: '#22c55e',
+        desc: 'kid が JWKS にあるので署名検証 OK。データを返す' },
+    ],
+  },
+  2: {
+    legs: [
+      { icon: '🗝️', label: '新しい鍵を追加', from: 'idp', to: 'idp', color: '#a78bfa',
+        desc: 'IdP が新しい鍵ペアを生成して JWKS に公開（新旧2本とも active）' },
+      { icon: '🪙', label: '旧 JWT + 新 JWT', from: 'browser', to: 'api', color: '#22c55e',
+        desc: '旧鍵の JWT と新鍵の JWT を両方 API へ送信' },
+      { icon: '🔓', label: 'JWKS 照会', from: 'api', to: 'idp', color: '#a78bfa',
+        desc: 'JWKS には新旧両方の kid が公開されている' },
+      { icon: '✅', label: '両方とも検証成功', from: 'api', to: 'browser', color: '#22c55e',
+        desc: '移行ウィンドウ中はどちらの JWT も有効（これがオーバーラップ期間）' },
+    ],
+  },
+  3: {
+    legs: [
+      { icon: '🗑️', label: '旧鍵を退役', from: 'idp', to: 'idp', color: '#f59e0b',
+        desc: 'IdP が旧鍵を JWKS から除外（ローテーション完了）' },
+      { icon: '🪙', label: '旧鍵の JWT', from: 'browser', to: 'api', color: '#f59e0b',
+        desc: '退役した鍵で署名された JWT を API へ送信してみる' },
+      { icon: '🔓', label: 'JWKS 照会', from: 'api', to: 'idp', color: '#a78bfa',
+        desc: 'JWKS を見ても旧 kid はもう存在しない' },
+      { icon: '❌', label: 'kid_retired', from: 'api', to: 'browser', color: '#ef4444',
+        desc: '検証失敗。ユーザーは再ログインして新鍵の JWT を取得する必要がある' },
+    ],
+  },
+  4: {
+    legs: [
+      { icon: '🚨', label: '鍵を失効 (revoke)', from: 'idp', to: 'idp', color: '#ef4444',
+        desc: '秘密鍵の漏洩を想定。IdP が新鍵を即時失効させる' },
+      { icon: '🪙', label: '失効鍵の JWT', from: 'browser', to: 'api', color: '#ef4444',
+        desc: '失効した鍵で署名された JWT を API へ送信してみる' },
+      { icon: '❌', label: 'key_revoked', from: 'api', to: 'browser', color: '#ef4444',
+        desc: '有効期限内でも即座に無効。その鍵の全 JWT が使えなくなる（全員強制ログアウト相当）' },
+    ],
+  },
+}
+
+const ACTORS: { lane: Lane; icon: string; name: string; sub: string; color: string }[] = [
+  { lane: 'browser', icon: '🧑‍💻', name: 'クライアント', sub: 'JWT を持つ側',           color: 'var(--accent)' },
+  { lane: 'idp',     icon: '🔐', name: 'IdP',           sub: '鍵を管理・JWKS を公開',   color: '#a78bfa' },
+  { lane: 'api',     icon: '🗄️', name: 'API (RS)',      sub: '公開鍵で署名を検証',      color: 'var(--warn)' },
+]
+
+const LEG_DURATION = 1100
+const LEG_PAUSE = 500
+
+function RotationFlowHeader({ stage }: { stage: number }) {
+  const anim = STAGE_ANIMS[stage] ?? STAGE_ANIMS[0]
+  const legs = anim.legs
+  const isIdle = legs.length === 0
+  const [legIndex, setLegIndex] = useState(0)
+  const [replayKey, setReplayKey] = useState(0)
+
+  const move: Leg = isIdle
+    ? { icon: anim.idle!.icon, label: anim.idle!.label, from: anim.idle!.lane, to: anim.idle!.lane,
+        color: anim.idle!.color, desc: anim.idle!.desc }
+    : legs[Math.min(legIndex, legs.length - 1)]
+  const samePos = move.from === move.to
+
+  const [chipPos, setChipPos] = useState<number>(POS[move.to])
+  const [animating, setAnimating] = useState(false)
+  const rafRef = useRef(0)
+  const timerRef = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  useEffect(() => { setLegIndex(0) }, [stage])
+
+  useEffect(() => {
+    const a = STAGE_ANIMS[stage] ?? STAGE_ANIMS[0]
+    cancelAnimationFrame(rafRef.current)
+    timerRef.current.forEach(clearTimeout)
+    timerRef.current = []
+
+    if (a.legs.length === 0) {
+      setAnimating(false)
+      setChipPos(POS[a.idle!.lane])
+      return
+    }
+
+    const leg = a.legs[Math.min(legIndex, a.legs.length - 1)]
+    setAnimating(false)
+    setChipPos(POS[leg.from])
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = requestAnimationFrame(() => {
+        setAnimating(true)
+        setChipPos(POS[leg.to])
+      })
+    })
+
+    if (legIndex < a.legs.length - 1) {
+      timerRef.current.push(setTimeout(() => setLegIndex(i => i + 1), LEG_DURATION + LEG_PAUSE))
+    }
+    return () => {
+      cancelAnimationFrame(rafRef.current)
+      timerRef.current.forEach(clearTimeout)
+    }
+  }, [stage, legIndex, replayKey])
+
+  return (
+    <div style={{
+      position: 'sticky',
+      top: 0,
+      zIndex: 50,
+      margin: '0 0 16px',
+      padding: '10px 12px 12px',
+      background: 'rgba(10,15,26,0.92)',
+      backdropFilter: 'blur(8px)',
+      WebkitBackdropFilter: 'blur(8px)',
+      border: '1px solid var(--border)',
+      borderRadius: 'var(--r-md)',
+      boxShadow: '0 6px 24px rgba(0,0,0,0.45)',
+    }}>
+      {/* シーケンスレーン */}
+      <div style={{ position: 'relative', height: 86 }}>
+        <div style={{
+          position: 'absolute',
+          left: `${POS.browser}%`,
+          right: `${100 - POS.api}%`,
+          top: 54,
+          height: 2,
+          background: 'var(--border)',
+          borderRadius: 1,
+        }} />
+
+        {!samePos && (
+          <div style={{
+            position: 'absolute',
+            left: `${Math.min(POS[move.from], POS[move.to])}%`,
+            width: `${Math.abs(POS[move.to] - POS[move.from])}%`,
+            top: 53,
+            height: 4,
+            borderRadius: 2,
+            background: `linear-gradient(to ${POS[move.to] > POS[move.from] ? 'right' : 'left'}, transparent, ${move.color})`,
+            opacity: 0.55,
+            transition: 'all 0.3s',
+          }} />
+        )}
+
+        {ACTORS.map(a => {
+          const involved = move.from === a.lane || move.to === a.lane
+          return (
+            <div key={a.lane} style={{
+              position: 'absolute',
+              left: `${POS[a.lane]}%`,
+              top: 30,
+              transform: 'translateX(-50%)',
+              textAlign: 'center',
+              transition: 'opacity 0.3s',
+              opacity: involved ? 1 : 0.45,
+            }}>
+              <div style={{
+                width: 46, height: 46, borderRadius: '50%',
+                background: 'var(--bg-inner)',
+                border: `2px solid ${involved ? a.color : 'var(--border)'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1.15rem',
+                margin: '0 auto 3px',
+                boxShadow: involved ? `0 0 12px color-mix(in srgb, ${a.color} 35%, transparent)` : 'none',
+                transition: 'all 0.3s',
+              }}>
+                {a.icon}
+              </div>
+              <div style={{ fontSize: '0.62rem', fontWeight: 700, color: involved ? a.color : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                {a.name}
+              </div>
+              <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                {a.sub}
+              </div>
+            </div>
+          )
+        })}
+
+        {/* 動くチップ */}
+        <div style={{
+          position: 'absolute',
+          left: `${chipPos}%`,
+          top: 0,
+          transform: 'translateX(-50%)',
+          transition: animating ? 'left 1.1s cubic-bezier(0.45, 0, 0.25, 1)' : 'none',
+          zIndex: 2,
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '3px 10px',
+            borderRadius: 99,
+            background: `color-mix(in srgb, ${move.color} 16%, #0a0f1a)`,
+            border: `1.5px solid ${move.color}`,
+            boxShadow: `0 0 14px color-mix(in srgb, ${move.color} 45%, transparent)`,
+            whiteSpace: 'nowrap',
+            animation: samePos ? 'rot-chip-pulse 1.4s ease-in-out infinite' : undefined,
+          }}>
+            <span style={{ fontSize: '0.85rem' }}>{move.icon}</span>
+            <span style={{
+              fontSize: '0.66rem',
+              fontWeight: 700,
+              color: move.color,
+              fontFamily: "'JetBrains Mono', monospace",
+            }}>
+              {move.label}
+            </span>
+          </div>
+          <div style={{
+            width: 1.5,
+            height: 26,
+            margin: '0 auto',
+            background: `repeating-linear-gradient(to bottom, ${move.color} 0 3px, transparent 3px 6px)`,
+            opacity: 0.7,
+          }} />
+        </div>
+      </div>
+
+      {/* 説明行 */}
+      <div style={{
+        marginTop: 2,
+        padding: '5px 10px',
+        borderRadius: 'var(--r-sm)',
+        background: 'var(--bg-inner)',
+        border: '1px solid var(--border)',
+        fontSize: '0.68rem',
+        color: 'var(--text-secondary)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+      }}>
+        <span style={{ color: move.color, fontWeight: 700, flexShrink: 0 }}>
+          {stage === 0 ? '開始前' : `STEP ${stage} 実行結果`}
+          {legs.length > 1 && (
+            <span style={{ marginLeft: 5, fontSize: '0.6rem', opacity: 0.85 }}>
+              通信 {Math.min(legIndex, legs.length - 1) + 1}/{legs.length}
+            </span>
+          )}
+        </span>
+        <span>{move.desc}</span>
+        {!isIdle && <button
+          onClick={() => { setLegIndex(0); setReplayKey(k => k + 1) }}
+          title="この通信のアニメーションをもう一度再生"
+          style={{
+            marginLeft: 'auto',
+            flexShrink: 0,
+            background: 'none',
+            border: '1px solid var(--border)',
+            borderRadius: 99,
+            color: 'var(--text-muted)',
+            fontSize: '0.62rem',
+            padding: '1px 8px',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          ↺ 再生
+        </button>}
+      </div>
+
+      <style>{`
+        @keyframes rot-chip-pulse {
+          0%, 100% { transform: scale(1); }
+          50%      { transform: scale(1.08); }
+        }
+      `}</style>
+    </div>
+  )
+}
 
 const API = 'http://localhost:8001'
 
@@ -301,8 +603,14 @@ export function RotationScenario({ keys, onRefresh }: Props) {
     onRefresh()
   }
 
+  // 完了済みの最終 STEP（連続実行前提なので非 null の最後のインデックス + 1）
+  const completedStage = results.reduce((acc, r, i) => (r !== null ? i + 1 : acc), 0)
+
   return (
     <div className="step-card">
+      {/* 動くチップ付きスティッキーヘッダー */}
+      <RotationFlowHeader stage={completedStage} />
+
       <div className="step-head">
         <span className="step-badge">SCENARIO</span>
         <h2>ローテーション学習シナリオ</h2>
