@@ -22,6 +22,114 @@ interface Props {
   onRefresh: () => void
 }
 
+// ─── 認証フロー図（SVG）: JWT署名 → JWKS検証 → 成功/失敗の分岐 ───
+function RotationFlowDiagram() {
+  const TXT = '#e2e8f0'
+  const SUB = '#94a3b8'
+  const BOX_BG = '#0e1520'
+  const BOX_BD = 'rgba(255,255,255,0.14)'
+  const BLUE = '#3b82f6'
+  const GREEN = '#22c55e'
+  const RED = '#ef4444'
+  const PURPLE = '#a78bfa'
+
+  const BY = 56
+  const BH = 72
+  const MID = BY + BH / 2
+  const boxes = [
+    { x: 16,  w: 170, icon: '🧑‍💻', label: 'ユーザー',     sub: 'ログインする本人',        accent: SUB },
+    { x: 256, w: 190, icon: '🔐', label: 'IdP (OKTA)',  sub: '秘密鍵で JWT に署名・発行', accent: PURPLE },
+    { x: 516, w: 190, icon: '🗄️', label: 'API サーバー', sub: 'JWKS の公開鍵で検証',      accent: BLUE },
+  ]
+
+  return (
+    <div style={{
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      borderRadius: 'var(--r-sm)',
+      padding: '10px 12px',
+    }}>
+      <svg viewBox="0 0 960 200" style={{ width: '100%', height: 'auto', display: 'block' }}>
+        <defs>
+          <marker id="rf-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M 0 1 L 9 5 L 0 9 z" fill={BLUE} />
+          </marker>
+          <marker id="rf-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M 0 1 L 9 5 L 0 9 z" fill={GREEN} />
+          </marker>
+          <marker id="rf-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M 0 1 L 9 5 L 0 9 z" fill={RED} />
+          </marker>
+        </defs>
+
+        {/* ── 矢印: ユーザー → IdP（ログイン）── */}
+        <line x1={boxes[0].x + boxes[0].w} y1={MID} x2={boxes[1].x} y2={MID}
+          stroke={BLUE} strokeWidth={2} markerEnd="url(#rf-blue)" opacity={0.9} />
+        <rect x={(boxes[0].x + boxes[0].w + boxes[1].x) / 2 - 36} y={MID - 26} width={72} height={18} rx={9}
+          fill="#0a0f1a" stroke={BLUE} strokeWidth={1} />
+        <text x={(boxes[0].x + boxes[0].w + boxes[1].x) / 2} y={MID - 13} textAnchor="middle"
+          fill={BLUE} fontSize={11} fontWeight={700}>ログイン</text>
+
+        {/* ── 矢印: IdP → API（JWT送信）── */}
+        <line x1={boxes[1].x + boxes[1].w} y1={MID} x2={boxes[2].x} y2={MID}
+          stroke={PURPLE} strokeWidth={2} markerEnd="url(#rf-blue)" opacity={0.9} />
+        <rect x={(boxes[1].x + boxes[1].w + boxes[2].x) / 2 - 48} y={MID - 26} width={96} height={18} rx={9}
+          fill="#0a0f1a" stroke={PURPLE} strokeWidth={1} />
+        <text x={(boxes[1].x + boxes[1].w + boxes[2].x) / 2} y={MID - 13} textAnchor="middle"
+          fill={PURPLE} fontSize={11} fontWeight={700} fontFamily="'JetBrains Mono',monospace">JWT を送信</text>
+
+        {/* ── 3ボックス ── */}
+        {boxes.map(b => (
+          <g key={b.label}>
+            <rect x={b.x} y={BY} width={b.w} height={BH} rx={12} fill={BOX_BG} stroke={BOX_BD} />
+            <rect x={b.x} y={BY} width={b.w} height={4} rx={2} fill={b.accent} opacity={0.85} />
+            <text x={b.x + b.w / 2} y={BY + 28} textAnchor="middle" fontSize={17}>{b.icon}</text>
+            <text x={b.x + b.w / 2} y={BY + 48} textAnchor="middle" fill={TXT} fontSize={13} fontWeight={700}>{b.label}</text>
+            <text x={b.x + b.w / 2} y={BY + 63} textAnchor="middle" fill={SUB} fontSize={10}>{b.sub}</text>
+          </g>
+        ))}
+
+        {/* ── 検証の分岐: API → 成功 / 失敗 ── */}
+        <line x1={boxes[2].x + boxes[2].w} y1={MID - 12} x2={770} y2={BY + 10}
+          stroke={GREEN} strokeWidth={1.8} markerEnd="url(#rf-green)" opacity={0.85} />
+        <line x1={boxes[2].x + boxes[2].w} y1={MID + 12} x2={770} y2={BY + BH + 12}
+          stroke={RED} strokeWidth={1.8} markerEnd="url(#rf-red)" opacity={0.85} />
+
+        {/* 成功側 */}
+        <rect x={774} y={BY - 14} width={172} height={46} rx={10}
+          fill="rgba(34,197,94,0.08)" stroke="rgba(34,197,94,0.4)" />
+        <text x={860} y={BY + 4} textAnchor="middle" fill={GREEN} fontSize={11.5} fontWeight={700}>
+          ✅ kid が JWKS にある
+        </text>
+        <text x={860} y={BY + 22} textAnchor="middle" fill={SUB} fontSize={10}>
+          検証成功 → データを返す
+        </text>
+
+        {/* 失敗側 */}
+        <rect x={774} y={BY + BH - 10} width={172} height={46} rx={10}
+          fill="rgba(239,68,68,0.08)" stroke="rgba(239,68,68,0.4)" />
+        <text x={860} y={BY + BH + 8} textAnchor="middle" fill={RED} fontSize={11.5} fontWeight={700}>
+          ❌ kid が JWKS にない
+        </text>
+        <text x={860} y={BY + BH + 26} textAnchor="middle" fill={SUB} fontSize={10}>
+          認証エラー → 要再ログイン
+        </text>
+
+        {/* ── JWKS 取得の点線（API の下）── */}
+        <line x1={boxes[2].x + boxes[2].w / 2} y1={BY + BH} x2={boxes[2].x + boxes[2].w / 2} y2={BY + BH + 28}
+          stroke={GREEN} strokeWidth={1.4} strokeDasharray="4 4" opacity={0.7} />
+        <text x={boxes[2].x + boxes[2].w / 2} y={BY + BH + 44} textAnchor="middle" fill={GREEN}
+          fontSize={10} fontFamily="'JetBrains Mono',monospace" opacity={0.9}>
+          GET /.well-known/jwks.json
+        </text>
+        <text x={boxes[2].x + boxes[2].w / 2} y={BY + BH + 60} textAnchor="middle" fill={SUB} fontSize={9.5} opacity={0.8}>
+          このラボで操作するのはココ（鍵の中身）
+        </text>
+      </svg>
+    </div>
+  )
+}
+
 export function RotationScenario({ keys, onRefresh }: Props) {
   const activeKeys = keys.filter(k => k.status === 'active')
 
@@ -240,18 +348,7 @@ export function RotationScenario({ keys, onRefresh }: Props) {
           <span style={{ color: 'var(--text-primary)' }}>① 定期交換</span>（長期使用は漏洩リスク増大）／
           <span style={{ color: 'var(--text-primary)' }}>② 緊急失効</span>（漏洩発覚時に即座に被害を封じ込める）
         </div>
-        <div style={{
-          padding: '6px 10px',
-          background: 'var(--bg-card)',
-          borderRadius: 'var(--r-sm)',
-          fontFamily: "'JetBrains Mono',monospace",
-          fontSize: '0.69rem',
-          color: 'var(--text-muted)',
-        }}>
-          ログイン → <span style={{ color: 'var(--jwt-payload-color)' }}>IdP が秘密鍵で JWT 署名・発行</span> → ユーザーが JWT を API へ送信
-          → <span style={{ color: 'var(--jwt-sig-color)' }}>API が JWKS の公開鍵で検証</span>
-          → <span style={{ color: 'var(--warn)' }}>kid が JWKS にない → 認証エラー（要再ログイン）</span>
-        </div>
+        <RotationFlowDiagram />
       </div>
 
       {/* 起点の鍵セレクタ */}
