@@ -103,6 +103,8 @@ interface Props {
   currentStep: number
 }
 
+const LANE_NAME: Record<Lane, string> = { browser: 'ブラウザ', idp: 'IdP', api: 'API' }
+
 const LEG_DURATION = 1100  // 1レグの移動時間(ms) — chip の transition と同期
 const LEG_PAUSE = 500      // レグ間の小休止(ms)
 
@@ -170,11 +172,12 @@ export function FlowDiagram({ currentStep }: Props) {
   }, [currentStep, legIndex, replayKey])
 
   return (
+    <>
     <div style={{
       position: 'sticky',
       top: 0,
       zIndex: 50,
-      margin: '0 -4px 20px',
+      margin: '0 -4px 12px',
       padding: '10px 12px 12px',
       background: 'rgba(10,15,26,0.92)',
       backdropFilter: 'blur(8px)',
@@ -383,5 +386,98 @@ export function FlowDiagram({ currentStep }: Props) {
         }
       `}</style>
     </div>
+
+    {/* ── 通信タイムライン（読める一覧・クリックで再生）── */}
+    {!isIdle && (
+      <div style={{
+        marginBottom: 20,
+        padding: '10px 12px',
+        background: 'var(--bg-inner)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--r-sm)',
+      }}>
+        <div style={{
+          fontSize: '0.68rem',
+          fontWeight: 700,
+          color: 'var(--text-secondary)',
+          marginBottom: 8,
+        }}>
+          📋 直前の操作で発生した通信
+          <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>
+            — 行をクリックするとその通信から再生されます
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {legs.map((leg, i) => {
+            const active = i === Math.min(legIndex, legs.length - 1)
+            const done = i < legIndex
+            return (
+              <button
+                key={i}
+                onClick={() => { setLegIndex(i); setReplayKey(k => k + 1) }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 10px',
+                  background: active ? `color-mix(in srgb, ${leg.color} 10%, transparent)` : 'transparent',
+                  border: `1px solid ${active ? leg.color : 'var(--border)'}`,
+                  borderRadius: 'var(--r-sm)',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  fontFamily: 'inherit',
+                  width: '100%',
+                  opacity: done || active ? 1 : 0.6,
+                  transition: 'all 0.25s',
+                  boxShadow: active ? `0 0 10px color-mix(in srgb, ${leg.color} 25%, transparent)` : 'none',
+                }}
+              >
+                <span style={{
+                  width: 18, height: 18, borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '0.6rem', fontWeight: 700,
+                  background: active ? leg.color : 'var(--bg-card)',
+                  color: active ? '#000' : 'var(--text-muted)',
+                  border: active ? 'none' : '1px solid var(--border)',
+                  flexShrink: 0,
+                }}>
+                  {i + 1}
+                </span>
+                <span style={{ fontSize: '0.85rem', flexShrink: 0 }}>{leg.icon}</span>
+                <span style={{
+                  fontSize: '0.64rem',
+                  fontFamily: "'JetBrains Mono',monospace",
+                  color: leg.color,
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  minWidth: 110,
+                }}>
+                  {LANE_NAME[leg.from]} → {LANE_NAME[leg.to]}
+                </span>
+                <span style={{
+                  fontSize: '0.7rem',
+                  fontWeight: 700,
+                  color: 'var(--text-primary)',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}>
+                  {leg.label}
+                </span>
+                <span style={{ fontSize: '0.66rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  {leg.desc}
+                </span>
+                {active && (
+                  <span style={{ marginLeft: 'auto', fontSize: '0.62rem', color: leg.color, flexShrink: 0, fontWeight: 700 }}>
+                    ▶ 再生中
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )}
+    </>
   )
 }

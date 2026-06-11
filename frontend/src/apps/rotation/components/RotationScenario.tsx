@@ -85,12 +85,156 @@ const ACTORS: { lane: Lane; icon: string; name: string; sub: string; color: stri
 const LEG_DURATION = 1100
 const LEG_PAUSE = 500
 
-function RotationFlowHeader({ stage }: { stage: number }) {
+// ─── 通信タイムライン: 現在のSTEPの全通信を一覧表示（読める・クリックで再生）───
+const LANE_NAME: Record<Lane, string> = { browser: 'クライアント', idp: 'IdP', api: 'API' }
+
+function CommTimeline({ stage, activeLeg, onSelect }: {
+  stage: number
+  activeLeg: number
+  onSelect: (i: number) => void
+}) {
+  const anim = STAGE_ANIMS[stage] ?? STAGE_ANIMS[0]
+  if (anim.legs.length === 0) return null
+
+  return (
+    <div style={{
+      marginBottom: 16,
+      padding: '10px 12px',
+      background: 'var(--bg-inner)',
+      border: '1px solid var(--border)',
+      borderRadius: 'var(--r-sm)',
+    }}>
+      <div style={{
+        fontSize: '0.68rem',
+        fontWeight: 700,
+        color: 'var(--text-secondary)',
+        marginBottom: 8,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+      }}>
+        📋 STEP {stage} で発生した通信の流れ
+        <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>
+          — 行をクリックするとその通信から再生されます
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {anim.legs.map((leg, i) => {
+          const active = i === activeLeg
+          const done = i < activeLeg
+          return (
+            <button
+              key={i}
+              onClick={() => onSelect(i)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 10px',
+                background: active ? `color-mix(in srgb, ${leg.color} 10%, transparent)` : 'transparent',
+                border: `1px solid ${active ? leg.color : 'var(--border)'}`,
+                borderRadius: 'var(--r-sm)',
+                cursor: 'pointer',
+                textAlign: 'left',
+                fontFamily: 'inherit',
+                width: '100%',
+                opacity: done || active ? 1 : 0.6,
+                transition: 'all 0.25s',
+                boxShadow: active ? `0 0 10px color-mix(in srgb, ${leg.color} 25%, transparent)` : 'none',
+              }}
+            >
+              {/* 通信番号 */}
+              <span style={{
+                width: 18, height: 18, borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.6rem', fontWeight: 700,
+                background: active ? leg.color : 'var(--bg-card)',
+                color: active ? '#000' : 'var(--text-muted)',
+                border: active ? 'none' : '1px solid var(--border)',
+                flexShrink: 0,
+              }}>
+                {i + 1}
+              </span>
+
+              {/* アイコン */}
+              <span style={{ fontSize: '0.85rem', flexShrink: 0 }}>{leg.icon}</span>
+
+              {/* 経路: from → to */}
+              <span style={{
+                fontSize: '0.64rem',
+                fontFamily: "'JetBrains Mono',monospace",
+                color: leg.color,
+                fontWeight: 700,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                minWidth: 132,
+              }}>
+                {leg.from === leg.to
+                  ? `${LANE_NAME[leg.from]} 内部`
+                  : `${LANE_NAME[leg.from]} → ${LANE_NAME[leg.to]}`}
+              </span>
+
+              {/* ラベル */}
+              <span style={{
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}>
+                {leg.label}
+              </span>
+
+              {/* 説明 */}
+              <span style={{
+                fontSize: '0.66rem',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.5,
+              }}>
+                {leg.desc}
+              </span>
+
+              {/* 再生中マーク */}
+              {active && (
+                <span style={{ marginLeft: 'auto', fontSize: '0.62rem', color: leg.color, flexShrink: 0, fontWeight: 700 }}>
+                  ▶ 再生中
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+interface FlowHeaderProps {
+  stage: number
+  jump?: { i: number; k: number }       // タイムライン行クリックでこのレグへジャンプ
+  onLegChange?: (i: number) => void     // 再生中のレグを親に通知
+}
+
+function RotationFlowHeader({ stage, jump, onLegChange }: FlowHeaderProps) {
   const anim = STAGE_ANIMS[stage] ?? STAGE_ANIMS[0]
   const legs = anim.legs
   const isIdle = legs.length === 0
   const [legIndex, setLegIndex] = useState(0)
   const [replayKey, setReplayKey] = useState(0)
+
+  // タイムライン行クリック → 指定レグから再生
+  useEffect(() => {
+    if (jump) {
+      setLegIndex(jump.i)
+      setReplayKey(k => k + 1)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jump?.k])
+
+  // 再生中レグを親へ通知
+  useEffect(() => {
+    onLegChange?.(legIndex)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [legIndex, stage])
 
   const move: Leg = isIdle
     ? { icon: anim.idle!.icon, label: anim.idle!.label, from: anim.idle!.lane, to: anim.idle!.lane,
@@ -606,10 +750,25 @@ export function RotationScenario({ keys, onRefresh }: Props) {
   // 完了済みの最終 STEP（連続実行前提なので非 null の最後のインデックス + 1）
   const completedStage = results.reduce((acc, r, i) => (r !== null ? i + 1 : acc), 0)
 
+  // 通信タイムラインとヘッダーの同期
+  const [activeLeg, setActiveLeg] = useState(0)
+  const [legJump, setLegJump] = useState<{ i: number; k: number } | undefined>()
+
   return (
     <div className="step-card">
       {/* 動くチップ付きスティッキーヘッダー */}
-      <RotationFlowHeader stage={completedStage} />
+      <RotationFlowHeader
+        stage={completedStage}
+        jump={legJump}
+        onLegChange={setActiveLeg}
+      />
+
+      {/* 通信タイムライン（読める一覧・クリックで再生） */}
+      <CommTimeline
+        stage={completedStage}
+        activeLeg={activeLeg}
+        onSelect={i => setLegJump(prev => ({ i, k: (prev?.k ?? 0) + 1 }))}
+      />
 
       <div className="step-head">
         <span className="step-badge">SCENARIO</span>
